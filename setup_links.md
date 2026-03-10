@@ -64,7 +64,7 @@ find <目標專案路徑>/.cursor -type l -delete
 
 #### 移除 Antigravity 連結：
 ```bash
-find <目標專案路徑>/.agent -type l -delete
+find <目標專案路徑>/.agents -type l -delete
 ```
 
 #### 移除全域 ~/.agent 連結：
@@ -77,7 +77,7 @@ find ~/.agent -type l -delete
 ```bash
 rm -rf <目標專案路徑>/.cursor
 # 或
-rm -rf <目標專案路徑>/.agent
+rm -rf <目標專案路徑>/.agents
 ```
 
 ---

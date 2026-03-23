@@ -1,10 +1,14 @@
+---
+name: project-guidelines-example
+description: "基于真实生产应用的示例项目特定技能模板。"
+origin: ECC
+---
+
 # 项目指南技能（示例）
 
 这是一个项目特定技能的示例。将其用作您自己项目的模板。
 
 基于一个真实的生产应用程序：[Zenith](https://zenith.chat) - 由 AI 驱动的客户发现平台。
-
-***
 
 ## 何时使用
 
@@ -33,23 +37,23 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Frontend                            │
+│                         前端                               │
 │  Next.js 15 + TypeScript + TailwindCSS                     │
-│  Deployed: Vercel / Cloud Run                              │
+│  部署平台：Vercel / Cloud Run                              │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                         Backend                             │
+│                         后端                               │
 │  FastAPI + Python 3.11 + Pydantic                          │
-│  Deployed: Cloud Run                                       │
+│  部署平台：Cloud Run                                       │
 └─────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
         ┌──────────┐   ┌──────────┐   ┌──────────┐
         │ Supabase │   │  Claude  │   │  Redis   │
-        │ Database │   │   API    │   │  Cache   │
+        │ 数据库   │   │   API    │   │  缓存    │
         └──────────┘   └──────────┘   └──────────┘
 ```
 
@@ -61,31 +65,31 @@
 project/
 ├── frontend/
 │   └── src/
-│       ├── app/              # Next.js app router pages
-│       │   ├── api/          # API routes
-│       │   ├── (auth)/       # Auth-protected routes
-│       │   └── workspace/    # Main app workspace
-│       ├── components/       # React components
-│       │   ├── ui/           # Base UI components
-│       │   ├── forms/        # Form components
-│       │   └── layouts/      # Layout components
-│       ├── hooks/            # Custom React hooks
-│       ├── lib/              # Utilities
-│       ├── types/            # TypeScript definitions
-│       └── config/           # Configuration
+│       ├── app/              # Next.js 应用路由页面
+│       │   ├── api/          # API 路由
+│       │   ├── (auth)/       # 受身份验证保护的路由
+│       │   └── workspace/    # 主应用工作区
+│       ├── components/       # React 组件
+│       │   ├── ui/           # 基础 UI 组件
+│       │   ├── forms/        # 表单组件
+│       │   └── layouts/      # 布局组件
+│       ├── hooks/            # 自定义 React 钩子
+│       ├── lib/              # 工具库
+│       ├── types/            # TypeScript 类型定义
+│       └── config/           # 配置文件
 │
 ├── backend/
-│   ├── routers/              # FastAPI route handlers
-│   ├── models.py             # Pydantic models
-│   ├── main.py               # FastAPI app entry
-│   ├── auth_system.py        # Authentication
-│   ├── database.py           # Database operations
-│   ├── services/             # Business logic
-│   └── tests/                # pytest tests
+│   ├── routers/              # FastAPI 路由处理器
+│   ├── models.py             # Pydantic 模型
+│   ├── main.py               # FastAPI 应用入口
+│   ├── auth_system.py        # 身份验证模块
+│   ├── database.py           # 数据库操作
+│   ├── services/             # 业务逻辑层
+│   └── tests/                # pytest 测试
 │
-├── deploy/                   # Deployment configs
-├── docs/                     # Documentation
-└── scripts/                  # Utility scripts
+├── deploy/                   # 部署配置
+├── docs/                     # 文档
+└── scripts/                  # 工具脚本
 ```
 
 ***

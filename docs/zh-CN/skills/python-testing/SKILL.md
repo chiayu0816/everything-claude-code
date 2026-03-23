@@ -1,6 +1,7 @@
 ---
 name: python-testing
-description: 使用pytest、TDD方法、夹具、模拟、参数化和覆盖率要求的Python测试策略。
+description: 使用pytest的Python测试策略，包括TDD方法、夹具、模拟、参数化和覆盖率要求。
+origin: ECC
 ---
 
 # Python 测试模式
@@ -594,18 +595,18 @@ def test_with_tmpdir(tmpdir):
 
 ```
 tests/
-├── conftest.py                 # Shared fixtures
+├── conftest.py                 # 共享 fixtures
 ├── __init__.py
-├── unit/                       # Unit tests
+├── unit/                       # 单元测试
 │   ├── __init__.py
 │   ├── test_models.py
 │   ├── test_utils.py
 │   └── test_services.py
-├── integration/                # Integration tests
+├── integration/                # 集成测试
 │   ├── __init__.py
 │   ├── test_api.py
 │   └── test_database.py
-└── e2e/                        # End-to-end tests
+└── e2e/                        # 端到端测试
     ├── __init__.py
     └── test_user_flow.py
 ```

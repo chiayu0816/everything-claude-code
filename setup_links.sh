@@ -51,18 +51,16 @@ if [[ "$TARGET" == "cursor" ]]; then
     DEST_SKILLS="$DEST_BASE/skills"
     SRC_CMDS="$SRC_DIR/.cursor/commands"
     DEST_CMDS="$DEST_BASE/commands"
-    SRC_MCP="$SRC_DIR/.cursor/mcp.json"
-    DEST_MCP="$DEST_BASE/mcp.json"
 else
-    # Antigravity 僅支援 rules、skills 子目錄，以及 agents/*.md 直接放在 .agents/ 根層
+    # Antigravity: rules/skills 放 .agents，workflows 僅來源於 commands
     DEST_BASE="$TARGET_PROJECT/.agents"
     SRC_RULES="$SRC_DIR/rules"
     DEST_RULES="$DEST_BASE/rules"
     SRC_SKILLS="$SRC_DIR/skills"
     DEST_SKILLS="$DEST_BASE/skills"
-    # agents/ 底下的文件直接連結到 .agents/ 根層（不放進子目錄）
-    SRC_AGENTS="$SRC_DIR/agents"
-    DEST_AGENTS="$DEST_BASE"
+    DEST_WORKFLOWS="$DEST_BASE/workflows"
+    SRC_CMDS="$SRC_DIR/commands"
+    DEST_CMDS="$DEST_WORKFLOWS"
 fi
 
 echo "🔧 正在將 $TARGET 設定 (Links) 佈署至 $DEST_BASE..."
@@ -81,7 +79,7 @@ mkdir -p "$DEST_BASE"
 link_item() {
     local src_file="$1"
     local dest_dir="$2"
-    local filename=$(basename "$src_file")
+    local filename="${3:-$(basename "$src_file")}"
     local dest_path="$dest_dir/$filename"
 
     mkdir -p "$dest_dir"
@@ -100,6 +98,7 @@ filter_and_link() {
     local category="$1"
     local src_dir="$2"
     local dest_dir="$3"
+    local rename_md_to_mdc="${4:-false}"
 
     if [ ! -d "$src_dir" ]; then
         return
@@ -143,7 +142,12 @@ filter_and_link() {
         done
 
         if $should_link; then
-            link_item "$src_item" "$dest_dir"
+            local link_name="$basename"
+            if [[ "$rename_md_to_mdc" == "true" ]] && [[ -f "$src_item" ]] && [[ "$basename" == *.md ]]; then
+                link_name="${basename%.md}.mdc"
+            fi
+
+            link_item "$src_item" "$dest_dir" "$link_name"
             ((linked_count++))
         fi
     done
@@ -153,16 +157,14 @@ filter_and_link() {
 }
 
 if [[ "$TARGET" == "cursor" ]]; then
-    # Cursor: 完整四大類別
-    filter_and_link "Rules"             "$SRC_RULES"  "$DEST_RULES"
-    filter_and_link "Agents"            "$SRC_AGENTS" "$DEST_AGENTS"
-    filter_and_link "Skills"            "$SRC_SKILLS" "$DEST_SKILLS"
-    filter_and_link "Commands/Workflows" "$SRC_CMDS"  "$DEST_CMDS"
+    filter_and_link "Rules"               "$SRC_RULES"  "$DEST_RULES" true
+    filter_and_link "Agents"              "$SRC_AGENTS" "$DEST_AGENTS"
+    filter_and_link "Skills"              "$SRC_SKILLS" "$DEST_SKILLS"
+    filter_and_link "Commands/Workflows"  "$SRC_CMDS"   "$DEST_CMDS"
 else
-    # Antigravity: 僅支援 rules、skills 子目錄，以及 agents 文件連結至根層
     filter_and_link "Rules"   "$SRC_RULES"   "$DEST_RULES"
     filter_and_link "Skills"  "$SRC_SKILLS"  "$DEST_SKILLS"
-    filter_and_link "Agents"  "$SRC_AGENTS"  "$DEST_AGENTS"
+    filter_and_link "Commands/Workflows" "$SRC_CMDS" "$DEST_CMDS"
 fi
 
 echo "----------------------------------------------------"

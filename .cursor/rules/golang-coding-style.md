@@ -1,7 +1,7 @@
 ---
 description: "Go coding style: gofmt mandatory, small interfaces, error wrapping with context"
 globs: ["**/*.go"]
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Go Coding Style

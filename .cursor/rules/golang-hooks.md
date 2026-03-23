@@ -1,7 +1,7 @@
 ---
 description: "Go hooks: gofmt/goimports auto-format, go vet, staticcheck"
 globs: ["**/*.go"]
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Go Hooks

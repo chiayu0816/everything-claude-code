@@ -1,7 +1,7 @@
 ---
 description: "Go security: environment variable secrets, gosec static analysis, context timeouts"
 globs: ["**/*.go"]
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Go Security

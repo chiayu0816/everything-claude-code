@@ -1,7 +1,7 @@
 ---
 description: "Go testing: table-driven tests, race detection, coverage reporting"
 globs: ["**/*.go"]
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Go Testing

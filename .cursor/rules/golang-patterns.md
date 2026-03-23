@@ -1,7 +1,7 @@
 ---
 description: "Go patterns: functional options, small interfaces, dependency injection"
 globs: ["**/*.go"]
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Go Patterns

@@ -51,6 +51,8 @@ if [[ "$TARGET" == "cursor" ]]; then
     DEST_SKILLS="$DEST_BASE/skills"
     SRC_CMDS="$SRC_DIR/.cursor/commands"
     DEST_CMDS="$DEST_BASE/commands"
+    SRC_HOOKS_JSON="$SRC_DIR/.cursor/hooks.json"
+    SRC_HOOKS_DIR="$SRC_DIR/.cursor/hooks"
 else
     # Antigravity: rules/skills 放 .agents，workflows 僅來源於 commands
     DEST_BASE="$TARGET_PROJECT/.agents"
@@ -161,6 +163,22 @@ if [[ "$TARGET" == "cursor" ]]; then
     filter_and_link "Agents"              "$SRC_AGENTS" "$DEST_AGENTS"
     filter_and_link "Skills"              "$SRC_SKILLS" "$DEST_SKILLS"
     filter_and_link "Commands/Workflows"  "$SRC_CMDS"   "$DEST_CMDS"
+    hooks_json_ok=false
+    hooks_dir_ok=false
+    [[ -f "$SRC_HOOKS_JSON" ]] && hooks_json_ok=true
+    [[ -d "$SRC_HOOKS_DIR" ]] && hooks_dir_ok=true
+    if $hooks_json_ok && $hooks_dir_ok; then
+        echo "📂 處理 [Hooks] ..."
+        link_item "$SRC_HOOKS_JSON" "$DEST_BASE" "hooks.json"
+        link_item "$SRC_HOOKS_DIR" "$DEST_BASE" "hooks"
+        echo "  ✅ 完成 [Hooks] 連結 (2 項)"
+        echo ""
+    elif $hooks_json_ok || $hooks_dir_ok; then
+        echo "❌ 錯誤: Cursor Hooks 必須同時具備下列兩項（缺一不可）："
+        $hooks_json_ok || echo "     缺少: $SRC_HOOKS_JSON"
+        $hooks_dir_ok || echo "     缺少: $SRC_HOOKS_DIR"
+        exit 1
+    fi
 else
     filter_and_link "Rules"   "$SRC_RULES"   "$DEST_RULES"
     filter_and_link "Skills"  "$SRC_SKILLS"  "$DEST_SKILLS"

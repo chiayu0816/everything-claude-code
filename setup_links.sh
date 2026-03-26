@@ -45,8 +45,11 @@ if [[ "$TARGET" == "cursor" ]]; then
     DEST_BASE="$TARGET_PROJECT/.cursor"
     SRC_RULES="$SRC_DIR/.cursor/rules"
     DEST_RULES="$DEST_BASE/rules"
-    SRC_AGENTS="$SRC_DIR/.cursor/agents"
+    SRC_AGENTS="$SRC_DIR/agents"
     DEST_AGENTS="$DEST_BASE/agents"
+    # Cursor 模式下：先將根目錄 ./skills 佈署進目標，再將 ./.cursor/skills 佈署進目標，
+    # 若同名衝突，後連結的 ./.cursor/skills 會覆蓋（符合同名以 cursor 為主）。
+    SRC_SKILLS_COMMON="$SRC_DIR/skills"
     SRC_SKILLS="$SRC_DIR/.cursor/skills"
     DEST_SKILLS="$DEST_BASE/skills"
     SRC_CMDS="$SRC_DIR/.cursor/commands"
@@ -110,7 +113,7 @@ filter_and_link() {
     mkdir -p "$dest_dir"
 
     # 定義語言關鍵字。不論是檔案前綴 (例如 golang-testing.md) 或是資料夾名稱 (例如 golang/) 都適用
-    local known_langs=("golang" "go" "typescript" "ts" "python" "django" "java" "springboot" "jpa" "cpp" "rust")
+    local known_langs=("golang" "go" "typescript" "ts" "python" "django" "java" "springboot" "jpa" "cpp" "rust" "csharp" "php" "perl" "android" "kotlin" "swift" "swiftui")
 
     local linked_count=0
 
@@ -161,6 +164,7 @@ filter_and_link() {
 if [[ "$TARGET" == "cursor" ]]; then
     filter_and_link "Rules"               "$SRC_RULES"  "$DEST_RULES" true
     filter_and_link "Agents"              "$SRC_AGENTS" "$DEST_AGENTS"
+    filter_and_link "Skills (Common)"   "$SRC_SKILLS_COMMON" "$DEST_SKILLS"
     filter_and_link "Skills"              "$SRC_SKILLS" "$DEST_SKILLS"
     filter_and_link "Commands/Workflows"  "$SRC_CMDS"   "$DEST_CMDS"
     hooks_json_ok=false

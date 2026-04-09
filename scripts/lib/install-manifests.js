@@ -1,10 +1,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { planInstallTargetScaffold } = require('./install-targets/registry');
+const { getInstallTargetAdapter, planInstallTargetScaffold } = require('./install-targets/registry');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
-const SUPPORTED_INSTALL_TARGETS = ['claude', 'cursor', 'antigravity', 'codex', 'opencode'];
+const SUPPORTED_INSTALL_TARGETS = ['claude', 'cursor', 'antigravity', 'codex', 'gemini', 'opencode', 'codebuddy'];
 const COMPONENT_FAMILY_PREFIXES = {
   baseline: 'baseline:',
   language: 'lang:',
@@ -37,6 +37,7 @@ const LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET = Object.freeze({
   ],
 });
 const LEGACY_LANGUAGE_ALIAS_TO_CANONICAL = Object.freeze({
+  c: 'c',
   cpp: 'cpp',
   csharp: 'csharp',
   go: 'go',
@@ -52,6 +53,7 @@ const LEGACY_LANGUAGE_ALIAS_TO_CANONICAL = Object.freeze({
   typescript: 'typescript',
 });
 const LEGACY_LANGUAGE_EXTRA_MODULE_IDS = Object.freeze({
+  c: ['framework-language'],
   cpp: ['framework-language'],
   csharp: ['framework-language'],
   go: ['framework-language'],
@@ -74,6 +76,48 @@ function readJson(filePath, label) {
 
 function dedupeStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(value => String(value).trim()).filter(Boolean))];
+}
+
+function readOptionalStringOption(options, key) {
+  if (
+    !Object.prototype.hasOwnProperty.call(options, key)
+    || options[key] === null
+    || options[key] === undefined
+  ) {
+    return null;
+  }
+
+  if (typeof options[key] !== 'string' || options[key].trim() === '') {
+    throw new Error(`${key} must be a non-empty string when provided`);
+  }
+
+  return options[key];
+}
+
+function readModuleTargetsOrThrow(module) {
+  const moduleId = module && module.id ? module.id : '<unknown>';
+  const targets = module && module.targets;
+
+  if (!Array.isArray(targets)) {
+    throw new Error(`Install module ${moduleId} has invalid targets; expected an array of supported target ids`);
+  }
+
+  const normalizedTargets = targets.map(target => (
+    typeof target === 'string' ? target.trim() : ''
+  ));
+
+  if (normalizedTargets.some(target => target.length === 0)) {
+    throw new Error(`Install module ${moduleId} has invalid targets; expected an array of supported target ids`);
+  }
+
+  const unsupportedTargets = normalizedTargets.filter(target => !SUPPORTED_INSTALL_TARGETS.includes(target));
+  if (unsupportedTargets.length > 0) {
+    throw new Error(
+      `Install module ${moduleId} has unsupported targets: ${unsupportedTargets.join(', ')}`
+    );
+  }
+
+  return normalizedTargets;
 }
 
 function assertKnownModuleIds(moduleIds, manifests) {
@@ -125,6 +169,11 @@ function loadInstallManifests(options = {}) {
     ? profilesData.profiles
     : {};
   const components = Array.isArray(componentsData.components) ? componentsData.components : [];
+
+  for (const module of modules) {
+    readModuleTargetsOrThrow(module);
+  }
+
   const modulesById = new Map(modules.map(module => [module.id, module]));
   const componentsById = new Map(components.map(component => [component.id, component]));
 
@@ -214,6 +263,45 @@ function listInstallComponents(options = {}) {
       };
     })
     .filter(component => !target || component.targets.includes(target));
+}
+
+function getInstallComponent(componentId, options = {}) {
+  const manifests = loadInstallManifests(options);
+  const normalizedComponentId = String(componentId || '').trim();
+
+  if (!normalizedComponentId) {
+    throw new Error('An install component ID is required');
+  }
+
+  const component = manifests.componentsById.get(normalizedComponentId);
+  if (!component) {
+    throw new Error(`Unknown install component: ${normalizedComponentId}`);
+  }
+
+  const moduleIds = dedupeStrings(component.modules);
+  const modules = moduleIds
+    .map(moduleId => manifests.modulesById.get(moduleId))
+    .filter(Boolean)
+    .map(module => ({
+      id: module.id,
+      kind: module.kind,
+      description: module.description,
+      targets: module.targets,
+      defaultInstall: module.defaultInstall,
+      cost: module.cost,
+      stability: module.stability,
+      dependencies: dedupeStrings(module.dependencies),
+    }));
+
+  return {
+    id: component.id,
+    family: component.family,
+    description: component.description,
+    moduleIds,
+    moduleCount: moduleIds.length,
+    targets: intersectTargets(modules),
+    modules,
+  };
 }
 
 function expandComponentIdsToModuleIds(componentIds, manifests) {
@@ -322,6 +410,16 @@ function resolveInstallPlan(options = {}) {
       `Unknown install target: ${target}. Expected one of ${SUPPORTED_INSTALL_TARGETS.join(', ')}`
     );
   }
+  const validatedProjectRoot = readOptionalStringOption(options, 'projectRoot');
+  const validatedHomeDir = readOptionalStringOption(options, 'homeDir');
+  const targetPlanningInput = target
+    ? {
+      repoRoot: manifests.repoRoot,
+      projectRoot: validatedProjectRoot || manifests.repoRoot,
+      homeDir: validatedHomeDir || os.homedir(),
+    }
+    : null;
+  const targetAdapter = target ? getInstallTargetAdapter(target) : null;
 
   const effectiveRequestedIds = dedupeStrings(
     requestedModuleIds.filter(moduleId => !excludedModuleOwners.has(moduleId))
@@ -357,7 +455,13 @@ function resolveInstallPlan(options = {}) {
       return;
     }
 
-    if (target && !module.targets.includes(target)) {
+    const supportsTarget = !target
+      || (
+        readModuleTargetsOrThrow(module).includes(target)
+        && (!targetAdapter || targetAdapter.supportsModule(module, targetPlanningInput))
+      );
+
+    if (!supportsTarget) {
       if (dependencyOf) {
         skippedTargetIds.add(rootRequesterId || dependencyOf);
         return false;
@@ -405,9 +509,9 @@ function resolveInstallPlan(options = {}) {
   const scaffoldPlan = target
     ? planInstallTargetScaffold({
       target,
-      repoRoot: manifests.repoRoot,
-      projectRoot: options.projectRoot || manifests.repoRoot,
-      homeDir: options.homeDir || os.homedir(),
+      repoRoot: targetPlanningInput.repoRoot,
+      projectRoot: targetPlanningInput.projectRoot,
+      homeDir: targetPlanningInput.homeDir,
       modules: selectedModules,
     })
     : null;
@@ -438,6 +542,7 @@ module.exports = {
   SUPPORTED_INSTALL_TARGETS,
   getManifestPaths,
   loadInstallManifests,
+  getInstallComponent,
   listInstallComponents,
   listLegacyCompatibilityLanguages,
   listInstallModules,

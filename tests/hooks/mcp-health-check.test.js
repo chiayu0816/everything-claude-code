@@ -8,7 +8,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const script = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'mcp-health-check.js');
 
@@ -79,6 +79,36 @@ function runHook(input, env = {}) {
   };
 }
 
+function runRawHook(rawInput, env = {}) {
+  const result = spawnSync('node', [script], {
+    input: rawInput,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      ECC_HOOK_PROFILE: 'standard',
+      ...env
+    },
+    timeout: 15000,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+
+  return {
+    code: result.status || 0,
+    stdout: result.stdout || '',
+    stderr: result.stderr || ''
+  };
+}
+
+function waitForFile(filePath, timeoutMs = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+  }
+  throw new Error(`Timed out waiting for ${filePath}`);
+}
 async function runTests() {
   console.log('\n=== Testing mcp-health-check.js ===\n');
 
@@ -95,6 +125,19 @@ async function runTests() {
     assert.strictEqual(result.stderr, '', 'Expected no stderr for non-MCP tool');
   })) passed++; else failed++;
 
+  if (test('blocks truncated MCP hook input by default', () => {
+    const rawInput = JSON.stringify({ tool_name: 'mcp__flaky__search', tool_input: {} });
+    const result = runRawHook(rawInput, {
+      CLAUDE_HOOK_EVENT_NAME: 'PreToolUse',
+      ECC_HOOK_INPUT_TRUNCATED: '1',
+      ECC_HOOK_INPUT_MAX_BYTES: '512'
+    });
+
+    assert.strictEqual(result.code, 2, 'Expected truncated MCP input to block by default');
+    assert.strictEqual(result.stdout, rawInput, 'Expected raw input passthrough on stdout');
+    assert.ok(result.stderr.includes('Hook input exceeded 512 bytes'), `Expected size warning, got: ${result.stderr}`);
+    assert.ok(/blocking search/i.test(result.stderr), `Expected blocking message, got: ${result.stderr}`);
+  })) passed++; else failed++;
   if (await asyncTest('marks healthy command MCP servers and allows the tool call', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'claude.json');
@@ -252,6 +295,127 @@ async function runTests() {
       const state = readState(statePath);
       assert.strictEqual(state.servers.authy.status, 'healthy', 'Expected authy server to be restored after reconnect');
     } finally {
+      cleanupTempDir(tempDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('treats HTTP 400 probe responses as healthy reachable servers', async () => {
+    const tempDir = createTempDir();
+    const configPath = path.join(tempDir, 'claude.json');
+    const statePath = path.join(tempDir, 'mcp-health.json');
+    const serverScript = path.join(tempDir, 'http-400-server.js');
+    const portFile = path.join(tempDir, 'server-port.txt');
+
+    fs.writeFileSync(
+      serverScript,
+      [
+        "const fs = require('fs');",
+        "const http = require('http');",
+        "const portFile = process.argv[2];",
+        "const server = http.createServer((_req, res) => {",
+        "  res.writeHead(400, { 'Content-Type': 'application/json' });",
+        "  res.end(JSON.stringify({ error: 'invalid MCP request' }));",
+        "});",
+        "server.listen(0, '127.0.0.1', () => {",
+        "  fs.writeFileSync(portFile, String(server.address().port));",
+        "});",
+        "setInterval(() => {}, 1000);"
+      ].join('\n')
+    );
+
+    const serverProcess = spawn(process.execPath, [serverScript, portFile], {
+      stdio: 'ignore'
+    });
+
+    try {
+      const port = waitForFile(portFile).trim();
+
+      writeConfig(configPath, {
+        mcpServers: {
+          github: {
+            type: 'http',
+            url: `http://127.0.0.1:${port}/mcp`
+          }
+        }
+      });
+
+      const input = { tool_name: 'mcp__github__search_repositories', tool_input: {} };
+      const result = runHook(input, {
+        CLAUDE_HOOK_EVENT_NAME: 'PreToolUse',
+        ECC_MCP_CONFIG_PATH: configPath,
+        ECC_MCP_HEALTH_STATE_PATH: statePath,
+        ECC_MCP_HEALTH_TIMEOUT_MS: '500'
+      });
+
+      assert.strictEqual(result.code, 0, `Expected HTTP 400 probe to be treated as healthy, got ${result.code}`);
+      assert.strictEqual(result.stdout.trim(), JSON.stringify(input), 'Expected original JSON on stdout');
+
+      const state = readState(statePath);
+      assert.strictEqual(state.servers.github.status, 'healthy', 'Expected HTTP MCP server to be marked healthy');
+    } finally {
+      serverProcess.kill('SIGTERM');
+      cleanupTempDir(tempDir);
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('treats HTTP 401 probe responses as healthy reachable OAuth-protected servers', async () => {
+    const tempDir = createTempDir();
+    const configPath = path.join(tempDir, 'claude.json');
+    const statePath = path.join(tempDir, 'mcp-health.json');
+    const serverScript = path.join(tempDir, 'http-401-server.js');
+    const portFile = path.join(tempDir, 'server-port.txt');
+
+    fs.writeFileSync(
+      serverScript,
+      [
+        "const fs = require('fs');",
+        "const http = require('http');",
+        "const portFile = process.argv[2];",
+        "const server = http.createServer((_req, res) => {",
+        "  res.writeHead(401, {",
+        "    'Content-Type': 'application/json',",
+        "    'WWW-Authenticate': 'Bearer realm=\"OAuth\", error=\"invalid_token\"'",
+        "  });",
+        "  res.end(JSON.stringify({ error: 'missing bearer token' }));",
+        "});",
+        "server.listen(0, '127.0.0.1', () => {",
+        "  fs.writeFileSync(portFile, String(server.address().port));",
+        "});",
+        "setInterval(() => {}, 1000);"
+      ].join('\n')
+    );
+
+    const serverProcess = spawn(process.execPath, [serverScript, portFile], {
+      stdio: 'ignore'
+    });
+
+    try {
+      const port = waitForFile(portFile).trim();
+
+      writeConfig(configPath, {
+        mcpServers: {
+          atlassian: {
+            type: 'http',
+            url: `http://127.0.0.1:${port}/mcp`
+          }
+        }
+      });
+
+      const input = { tool_name: 'mcp__atlassian__search', tool_input: {} };
+      const result = runHook(input, {
+        CLAUDE_HOOK_EVENT_NAME: 'PreToolUse',
+        ECC_MCP_CONFIG_PATH: configPath,
+        ECC_MCP_HEALTH_STATE_PATH: statePath,
+        ECC_MCP_HEALTH_TIMEOUT_MS: '500'
+      });
+
+      assert.strictEqual(result.code, 0, `Expected HTTP 401 probe to be treated as healthy, got ${result.code}`);
+      assert.strictEqual(result.stdout.trim(), JSON.stringify(input), 'Expected original JSON on stdout');
+
+      const state = readState(statePath);
+      assert.strictEqual(state.servers.atlassian.status, 'healthy', 'Expected OAuth-protected HTTP MCP server to be marked healthy');
+    } finally {
+      serverProcess.kill('SIGTERM');
       cleanupTempDir(tempDir);
     }
   })) passed++; else failed++;
